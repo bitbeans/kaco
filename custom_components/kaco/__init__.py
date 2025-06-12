@@ -32,7 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
    # Add a listener to handle config entry updates
    config_entry.add_update_listener(update_listener)
    # Set up the platform entities by forwarding the config entry
-   await hass.config_entries.async_forward_entry_setup(config_entry, PLATFORM)
+   await hass.config_entries.async_forward_entry_setups(config_entry, [PLATFORM])
    return True 
 
 
@@ -49,7 +49,7 @@ async def update_listener(hass, entry):
     """Update listener."""
     entry.data = entry.options
     await hass.config_entries.async_forward_entry_unload(entry, PLATFORM)
-    hass.async_add_job(hass.config_entries.async_forward_entry_setup(entry, PLATFORM))
+    hass.async_add_job(hass.config_entries.async_forward_entry_setups(entry, [PLATFORM]))
 
 
 def exc():
