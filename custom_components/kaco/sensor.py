@@ -1,32 +1,28 @@
+
 """
 Custom component to grab data from a kaco solar inverter.
-
-@ Author      : Kolja Windeler
-@ Date          : 2020/08/10
+@ Author : Kolja Windeler
+@ Date : 2020/08/10
 @ Description : Grabs and parses the data of a kaco inverter
 """
+from __future__ import annotations
+
 import logging
-from typing import Tuple
-from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.helpers import update_coordinator
-from homeassistant.helpers.entity import Entity, async_generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.components.sensor import ENTITY_ID_FORMAT, SensorEntity
-from homeassistant.const import (
-    CONF_NAME,
-    UnitOfEnergy
-)
-from homeassistant.components.sensor import (
-    SensorDeviceClass
-)
-from tzlocal import get_localzone
-from functools import partial
-import requests
-import datetime
-import traceback
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.const import CONF_NAME, UnitOfEnergy
+from homeassistant.components.sensor import SensorDeviceClass
 
 from custom_components.kaco import get_coordinator
-from .const import *
+from .const import (
+    DOMAIN,
+    DEFAULT_ICON,
+    DEFAULT_NAME,
+    CONF_KACO_URL,
+    MEAS_VALUES,
+    MeasurementObj,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,109 +34,151 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         coordinator = await get_coordinator(hass, config)
         async_add_entities(
             [
-                kaco_sensor(hass, config, coordinator, sensorObject)
-                for sensorObject in MEAS_VALUES
-                if sensorObject.checkEnabled(config)
+                KacoSensor(hass, config, coordinator, sensor_obj)
+                for sensor_obj in MEAS_VALUES
+                if sensor_obj.checkEnabled(config)
             ],
-            True,
+            # Wichtig: KEIN erzwungenes initiales Update – Coordinator liefert Daten nach.
+            False,
         )
 
 
-async def async_setup_entry(hass, config, async_add_devices):
-    """Run setup via Storage."""
+async def async_setup_entry(hass, config_entry, async_add_devices):
+    """Run setup via Storage/UI."""
     _LOGGER.debug("Config via Storage/UI")
-    if len(config.data) > 0:
-        coordinator = await get_coordinator(hass, config.data)
+    if len(config_entry.data) > 0:
+        coordinator = await get_coordinator(hass, config_entry.data)
         async_add_devices(
             [
-                kaco_sensor(hass, config.data, coordinator, sensorObject)
-                for sensorObject in MEAS_VALUES
-                if sensorObject.checkEnabled(config.data)
+                KacoSensor(hass, config_entry.data, coordinator, sensor_obj)
+                for sensor_obj in MEAS_VALUES
+                if sensor_obj.checkEnabled(config_entry.data)
             ],
-            True,
+            # Wichtig: KEIN erzwungenes initiales Update
+            False,
         )
 
 
-class kaco_sensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Sensor."""
+class KacoSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a KACO Sensor."""
 
     def __init__(
         self,
         hass,
-        config,
+        config: dict,
         coordinator: update_coordinator.DataUpdateCoordinator,
-        sensorObject: MeasurementObj,
+        sensor_obj: MeasurementObj,
     ):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.hass = hass
-        self._state_attributes = None
         self.coordinator = coordinator
-        self._valueKey = sensorObject.valueKey
-        self._unit = sensorObject.unit
-        self._description = sensorObject.description
 
-        self._url = config.get(CONF_KACO_URL)
-        self._name = config.get(CONF_NAME)
+        self._value_key = sensor_obj.valueKey
+        self._unit = sensor_obj.unit
+        self._description = sensor_obj.description
+        self._url: str = config.get(CONF_KACO_URL) or ""
+        self._name: str = config.get(CONF_NAME) or DEFAULT_NAME
         self._icon = DEFAULT_ICON
 
-        self._id = self._url.split(".")[-1]
+        # Fallback-ID aus Host/IP (letztes Label) oder komplette URL
+        try:
+            self._id = (self._url.split(".")[-1] or self._url).strip()
+        except Exception:
+            self._id = (self._url or "unknown").strip()
 
-        _LOGGER.debug("KACO config: ")
-        _LOGGER.debug("\tname: " + self._name)
-        _LOGGER.debug("\turl: " + self._url)
-        _LOGGER.debug("\ticon: " + str(self._icon))
-        _LOGGER.debug("\tvalueKey: " + self._valueKey)
-        _LOGGER.debug("\tInitData: " + str(self.coordinator.data))
+        _LOGGER.debug("KACO config:")
+        _LOGGER.debug("\tname: %s", self._name)
+        _LOGGER.debug("\turl: %s", self._url)
+        _LOGGER.debug("\ticon: %s", self._icon)
+        _LOGGER.debug("\tvalueKey: %s", self._value_key)
+        _LOGGER.debug("\tInitData: %s", getattr(self.coordinator, "data", None))
 
     @property
-    def unique_id(self):
-        return self.coordinator.data["extra"]["serialno"] + self._valueKey
+    def unique_id(self) -> str:
+        """Stable unique_id even if coordinator has no data yet."""
+        serial = None
+        try:
+            if self.coordinator and self.coordinator.data:
+                serial = self.coordinator.data.get("extra", {}).get("serialno")
+        except Exception:
+            serial = None
+        base = serial or self._id or self._url or "unknown"
+        return f"{DOMAIN}_{base}_{self._value_key}"
 
     @property
-    def name(self):
+    def name(self) -> str:
         """Return the name of the sensor."""
-        return self._name + " " + self._description
+        return f"{self._name} {self._description}"
 
     @property
-    def icon(self):
-        """Return the icon to use in the frontend."""
+    def icon(self) -> str:
+        """Return the icon for the frontend."""
         return self._icon
 
     @property
     def device_info(self):
-        return {
+        """Device info without hard dependency on live data."""
+        info = {
             "identifiers": {(DOMAIN, self._id)},
             "name": self.name,
-            "configuration_url": "http://" + self._url,
+            "configuration_url": f"http://{self._url}" if self._url else None,
             "manufacturer": "Kaco",
-            "model": self.coordinator.data["extra"]["model"],
         }
+        try:
+            if self.coordinator and self.coordinator.data:
+                model = self.coordinator.data.get("extra", {}).get("model")
+                if model:
+                    info["model"] = model
+        except Exception:
+            pass
+        return info
 
     @property
     def extra_state_attributes(self):
-        """Return the state attributes."""
-        return self.coordinator.data.get("extra")
+        """Return extra attributes if available."""
+        try:
+            if self.coordinator and self.coordinator.data:
+                return self.coordinator.data.get("extra")
+            return None
+        except Exception:
+            return None
 
+    # HA <2022: unit_of_measurement; HA 2022+: native_unit_of_measurement
     @property
     def unit_of_measurement(self):
-        """Return the unit the value is expressed in."""
         return self._unit
 
     @property
     def native_unit_of_measurement(self):
-        """Return the unit the value is expressed in natively."""
         return self._unit
 
     @property
     def native_value(self):
-        """Return the state of the sensor."""
-        return self.coordinator.data.get(self._valueKey)
+        """Return the sensor value if available, else None."""
+        try:
+            if self.coordinator and self.coordinator.data:
+                return self.coordinator.data.get(self._value_key)
+            return None
+        except Exception:
+            return None
 
     @property
     def device_class(self):
-        return SensorDeviceClass.ENERGY if self._unit == UnitOfEnergy.KILO_WATT_HOUR else None
+        return (
+            SensorDeviceClass.ENERGY
+            if self._unit == UnitOfEnergy.KILO_WATT_HOUR
+            else None
+        )
 
     @property
     def state_class(self):
-        return "total_increasing" if self._unit == UnitOfEnergy.KILO_WATT_HOUR else None
+        return (
+            "total_increasing"
+            if self._unit == UnitOfEnergy.KILO_WATT_HOUR
+            else None
+        )
+
+    # Wichtig: **keine** eigene `available`-Property überschreiben.
+    # Wir nutzen die von `CoordinatorEntity`, die auf `last_update_success` basiert.
+
