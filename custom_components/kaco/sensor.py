@@ -165,19 +165,19 @@ class KacoSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_class(self):
-        return (
-            SensorDeviceClass.ENERGY
-            if self._unit == UnitOfEnergy.KILO_WATT_HOUR
-            else None
-        )
+        if self._unit == UnitOfEnergy.KILO_WATT_HOUR:
+            return SensorDeviceClass.ENERGY
+        if self._unit in ["W", "kW"]:
+            return SensorDeviceClass.POWER
+        return None
 
     @property
     def state_class(self):
-        return (
-            "total_increasing"
-            if self._unit == UnitOfEnergy.KILO_WATT_HOUR
-            else None
-        )
+        if self._unit == UnitOfEnergy.KILO_WATT_HOUR:
+            return "total_increasing"
+        if self._unit in ["W", "kW"]:
+            return "measurement"
+        return None
 
     # Wichtig: **keine** eigene `available`-Property überschreiben.
     # Wir nutzen die von `CoordinatorEntity`, die auf `last_update_success` basiert.
