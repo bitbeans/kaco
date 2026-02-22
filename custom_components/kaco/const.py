@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 """
@@ -13,10 +12,9 @@ from typing import Dict
 from collections import OrderedDict
 import logging
 import datetime
-from functools import partial
+import asyncio
 
 import voluptuous as vol
-import requests
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import (
@@ -175,9 +173,8 @@ for idx, txt in t_map.items():
 # -----------------------------
 DOMAIN = "kaco"
 PLATFORM = "sensor"
-VERSION = "0.1.0"
+VERSION = "0.7.0"
 ISSUE_URL = "https://github.com/KoljaWindeler/kaco/issues"
-SCAN_INTERVAL = datetime.timedelta(seconds=5)  # optional
 
 # -----------------------------
 # Konfiguration
@@ -190,6 +187,8 @@ CONF_GENERATOR_VOLTAGE = "generator_voltage"
 CONF_GENERATOR_CURRENT = "generator_current"
 CONF_GRID_VOLTAGE = "grid_voltage"
 CONF_GRID_CURRENT = "grid_current"
+CONF_SERIAL_NUMBER = "serial_number"
+CONF_MAC_ADDRESS = "mac_address"
 
 # Defaults
 DEFAULT_ICON = "mdi:solar-power"
@@ -201,6 +200,7 @@ DEFAULT_GENERATOR_CURRENT = False
 DEFAULT_GRID_VOLTAGE = False
 DEFAULT_GRID_CURRENT = False
 
+
 # -----------------------------
 # Measurement-Definitionen
 # -----------------------------
@@ -210,7 +210,13 @@ class MeasurementObj:
     isMandatory: bool
     _enableKey: str | None
 
-    def __init__(self, valueKey: str, unit: str, enableKey: str | None = None, isMandatory: bool = False):
+    def __init__(
+        self,
+        valueKey: str,
+        unit: str,
+        enableKey: str | None = None,
+        isMandatory: bool = False,
+    ):
         self.valueKey = valueKey
         self.unit = unit
         self._enableKey = enableKey
@@ -236,17 +242,39 @@ class MeasurementObj:
 
 
 MEAS_CURRENT_POWER = MeasurementObj("currentPower", UnitOfPower.WATT, isMandatory=True)
-MEAS_ENERGY_TODAY = MeasurementObj("energyToday", UnitOfEnergy.KILO_WATT_HOUR, isMandatory=True)
-MEAS_GEN_VOLT1 = MeasurementObj("generatorVoltage1", UnitOfElectricPotential.VOLT, CONF_GENERATOR_VOLTAGE)
-MEAS_GEN_VOLT2 = MeasurementObj("generatorVoltage2", UnitOfElectricPotential.VOLT, CONF_GENERATOR_VOLTAGE)
-MEAS_GEN_CURR1 = MeasurementObj("generatorCurrent1", UnitOfElectricCurrent.AMPERE, CONF_GENERATOR_CURRENT)
-MEAS_GEN_CURR2 = MeasurementObj("generatorCurrent2", UnitOfElectricCurrent.AMPERE, CONF_GENERATOR_CURRENT)
-MEAS_GRID_VOLT1 = MeasurementObj("gridVoltage1", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE)
-MEAS_GRID_VOLT2 = MeasurementObj("gridVoltage2", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE)
-MEAS_GRID_VOLT3 = MeasurementObj("gridVoltage3", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE)
-MEAS_GRID_CURR1 = MeasurementObj("gridCurrent1", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT)
-MEAS_GRID_CURR2 = MeasurementObj("gridCurrent2", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT)
-MEAS_GRID_CURR3 = MeasurementObj("gridCurrent3", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT)
+MEAS_ENERGY_TODAY = MeasurementObj(
+    "energyToday", UnitOfEnergy.KILO_WATT_HOUR, isMandatory=True
+)
+MEAS_GEN_VOLT1 = MeasurementObj(
+    "generatorVoltage1", UnitOfElectricPotential.VOLT, CONF_GENERATOR_VOLTAGE
+)
+MEAS_GEN_VOLT2 = MeasurementObj(
+    "generatorVoltage2", UnitOfElectricPotential.VOLT, CONF_GENERATOR_VOLTAGE
+)
+MEAS_GEN_CURR1 = MeasurementObj(
+    "generatorCurrent1", UnitOfElectricCurrent.AMPERE, CONF_GENERATOR_CURRENT
+)
+MEAS_GEN_CURR2 = MeasurementObj(
+    "generatorCurrent2", UnitOfElectricCurrent.AMPERE, CONF_GENERATOR_CURRENT
+)
+MEAS_GRID_VOLT1 = MeasurementObj(
+    "gridVoltage1", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE
+)
+MEAS_GRID_VOLT2 = MeasurementObj(
+    "gridVoltage2", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE
+)
+MEAS_GRID_VOLT3 = MeasurementObj(
+    "gridVoltage3", UnitOfElectricPotential.VOLT, CONF_GRID_VOLTAGE
+)
+MEAS_GRID_CURR1 = MeasurementObj(
+    "gridCurrent1", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT
+)
+MEAS_GRID_CURR2 = MeasurementObj(
+    "gridCurrent2", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT
+)
+MEAS_GRID_CURR3 = MeasurementObj(
+    "gridCurrent3", UnitOfElectricCurrent.AMPERE, CONF_GRID_CURRENT
+)
 
 MEAS_VALUES = [
     MEAS_CURRENT_POWER,
@@ -274,27 +302,34 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_INTERVAL, default=DEFAULT_INTERVAL): vol.Coerce(int),
         vol.Optional(CONF_KWH_INTERVAL, default=DEFAULT_KWH_INTERVAL): vol.Coerce(int),
-        vol.Optional(CONF_GENERATOR_VOLTAGE, default=DEFAULT_GENERATOR_VOLTAGE): vol.Coerce(bool),
-        vol.Optional(CONF_GENERATOR_CURRENT, default=DEFAULT_GENERATOR_CURRENT): vol.Coerce(bool),
+        vol.Optional(
+            CONF_GENERATOR_VOLTAGE, default=DEFAULT_GENERATOR_VOLTAGE
+        ): vol.Coerce(bool),
+        vol.Optional(
+            CONF_GENERATOR_CURRENT, default=DEFAULT_GENERATOR_CURRENT
+        ): vol.Coerce(bool),
         vol.Optional(CONF_GRID_VOLTAGE, default=DEFAULT_GRID_VOLTAGE): vol.Coerce(bool),
         vol.Optional(CONF_GRID_CURRENT, default=DEFAULT_GRID_CURRENT): vol.Coerce(bool),
     }
 )
 
+
 # -----------------------------
 # UI-Hilfsfunktionen
 # -----------------------------
-async def check_data(user_input, async_add_executor_job):
+async def check_data(user_input, hass):
     """
-    Best-Effort-Validierung der URL:
-    - Kurzer Timeout
-    - Bei Fehler NICHT blockieren (gibt {} zurück)
+    Best-Effort-Validierung der URL via aiohttp.
+    Bei Fehler NICHT blockieren (gibt {} zurück).
     """
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
     if CONF_KACO_URL in user_input:
         url = "http://" + user_input[CONF_KACO_URL] + "/realtime.csv"
         try:
-            # Timeout muss an requests.get übergeben werden (via partial)
-            await async_add_executor_job(partial(requests.get, url, timeout=3))
+            session = async_get_clientsession(hass)
+            async with asyncio.timeout(3):
+                await session.get(url)
             return {}
         except Exception as ex:
             _LOGGER.warning(
@@ -304,6 +339,7 @@ async def check_data(user_input, async_add_executor_job):
             )
             return {}
     return {}
+
 
 def ensure_config(user_input: Dict | None) -> Dict:
     """Sorge für vollständige Konfig mit Defaults."""
@@ -321,12 +357,28 @@ def ensure_config(user_input: Dict | None) -> Dict:
         out[CONF_NAME] = user_input.get(CONF_NAME, out[CONF_NAME])
         out[CONF_KACO_URL] = user_input.get(CONF_KACO_URL, out[CONF_KACO_URL])
         out[CONF_INTERVAL] = user_input.get(CONF_INTERVAL, out[CONF_INTERVAL])
-        out[CONF_KWH_INTERVAL] = user_input.get(CONF_KWH_INTERVAL, out[CONF_KWH_INTERVAL])
-        out[CONF_GENERATOR_VOLTAGE] = user_input.get(CONF_GENERATOR_VOLTAGE, out[CONF_GENERATOR_VOLTAGE])
-        out[CONF_GENERATOR_CURRENT] = user_input.get(CONF_GENERATOR_CURRENT, out[CONF_GENERATOR_CURRENT])
-        out[CONF_GRID_VOLTAGE] = user_input.get(CONF_GRID_VOLTAGE, out[CONF_GRID_VOLTAGE])
-        out[CONF_GRID_CURRENT] = user_input.get(CONF_GRID_CURRENT, out[CONF_GRID_CURRENT])
+        out[CONF_KWH_INTERVAL] = user_input.get(
+            CONF_KWH_INTERVAL, out[CONF_KWH_INTERVAL]
+        )
+        out[CONF_GENERATOR_VOLTAGE] = user_input.get(
+            CONF_GENERATOR_VOLTAGE, out[CONF_GENERATOR_VOLTAGE]
+        )
+        out[CONF_GENERATOR_CURRENT] = user_input.get(
+            CONF_GENERATOR_CURRENT, out[CONF_GENERATOR_CURRENT]
+        )
+        out[CONF_GRID_VOLTAGE] = user_input.get(
+            CONF_GRID_VOLTAGE, out[CONF_GRID_VOLTAGE]
+        )
+        out[CONF_GRID_CURRENT] = user_input.get(
+            CONF_GRID_CURRENT, out[CONF_GRID_CURRENT]
+        )
+        # Preserve optional fields if present
+        if CONF_SERIAL_NUMBER in user_input:
+            out[CONF_SERIAL_NUMBER] = user_input[CONF_SERIAL_NUMBER]
+        if CONF_MAC_ADDRESS in user_input:
+            out[CONF_MAC_ADDRESS] = user_input[CONF_MAC_ADDRESS]
     return out
+
 
 def create_form(user_input: Dict | None):
     """Erzeuge das Formular-Schema für UI-Setup/Options."""
@@ -334,10 +386,34 @@ def create_form(user_input: Dict | None):
     data_schema = OrderedDict()
     data_schema[vol.Required(CONF_NAME, default=user_input[CONF_NAME])] = str
     data_schema[vol.Required(CONF_KACO_URL, default=user_input[CONF_KACO_URL])] = str
-    data_schema[vol.Optional(CONF_INTERVAL, default=user_input[CONF_INTERVAL])] = vol.Coerce(int)
-    data_schema[vol.Optional(CONF_KWH_INTERVAL, default=user_input[CONF_KWH_INTERVAL])] = vol.Coerce(int)
-    data_schema[vol.Optional(CONF_GENERATOR_VOLTAGE, default=user_input[CONF_GENERATOR_VOLTAGE])] = bool
-    data_schema[vol.Optional(CONF_GENERATOR_CURRENT, default=user_input[CONF_GENERATOR_CURRENT])] = bool
-    data_schema[vol.Optional(CONF_GRID_VOLTAGE, default=user_input[CONF_GRID_VOLTAGE])] = bool
-    data_schema[vol.Optional(CONF_GRID_CURRENT, default=user_input[CONF_GRID_CURRENT])] = bool
+    data_schema[vol.Optional(CONF_INTERVAL, default=user_input[CONF_INTERVAL])] = (
+        vol.Coerce(int)
+    )
+    data_schema[
+        vol.Optional(CONF_KWH_INTERVAL, default=user_input[CONF_KWH_INTERVAL])
+    ] = vol.Coerce(int)
+    data_schema[
+        vol.Optional(CONF_GENERATOR_VOLTAGE, default=user_input[CONF_GENERATOR_VOLTAGE])
+    ] = bool
+    data_schema[
+        vol.Optional(CONF_GENERATOR_CURRENT, default=user_input[CONF_GENERATOR_CURRENT])
+    ] = bool
+    data_schema[
+        vol.Optional(CONF_GRID_VOLTAGE, default=user_input[CONF_GRID_VOLTAGE])
+    ] = bool
+    data_schema[
+        vol.Optional(CONF_GRID_CURRENT, default=user_input[CONF_GRID_CURRENT])
+    ] = bool
+    data_schema[
+        vol.Optional(
+            CONF_SERIAL_NUMBER,
+            default=user_input.get(CONF_SERIAL_NUMBER, ""),
+        )
+    ] = str
+    data_schema[
+        vol.Optional(
+            CONF_MAC_ADDRESS,
+            default=user_input.get(CONF_MAC_ADDRESS, ""),
+        )
+    ] = str
     return data_schema

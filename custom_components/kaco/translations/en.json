@@ -13,12 +13,17 @@
                     "generator_voltage": "Enable Entity: Generator Voltage",
                     "generator_current": "Enable Entity: Generator Current",
                     "grid_voltage": "Enable Entity: Grid Voltage",
-                    "grid_current": "Enable Entity: Grid Current"
+                    "grid_current": "Enable Entity: Grid Current",
+                    "serial_number": "Serial number (optional, for device info)",
+                    "mac_address": "MAC address (optional, for device matching)"
                 }
             }
         },
         "error": {
             "url_error": "The URL is not valid, could not download data."
+        },
+        "abort": {
+            "already_configured": "This inverter IP is already configured."
         }
     },
     "options": {
@@ -34,7 +39,9 @@
                     "generator_voltage": "Enable Entity: Generator Voltage",
                     "generator_current": "Enable Entity: Generator Current",
                     "grid_voltage": "Enable Entity: Grid Voltage",
-                    "grid_current": "Enable Entity: Grid Current"
+                    "grid_current": "Enable Entity: Grid Current",
+                    "serial_number": "Serial number (optional, for device info)",
+                    "mac_address": "MAC address (optional, for device matching)"
                 }
             }
         },

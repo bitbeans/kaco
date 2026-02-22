@@ -1,5 +1,5 @@
-
 """Config flow for the KACO custom component."""
+
 from __future__ import annotations
 
 import logging
@@ -9,10 +9,10 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-# Wir verwenden nur die benötigten Symbole aus const.py
 from .const import (
     DOMAIN,
     CONF_NAME,
+    CONF_KACO_URL,
     create_form,
     check_data,
     ensure_config,
@@ -25,7 +25,6 @@ class KacoFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the config flow for KACO."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:
         """Initialize flow state."""
@@ -41,11 +40,15 @@ class KacoFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self._defaults = ensure_config(user_input or {})
 
         if user_input is not None:
-            # Best‑Effort‑Validierung – darf die Einrichtung NICHT blockieren.
+            # Prevent duplicate config entries for the same IP
+            ip = user_input.get(CONF_KACO_URL)
+            if ip:
+                await self.async_set_unique_id(ip)
+                self._abort_if_unique_id_configured()
+
+            # Best-Effort-Validierung – darf die Einrichtung NICHT blockieren.
             try:
-                self._errors = await check_data(
-                    user_input, self.hass.async_add_executor_job
-                )
+                self._errors = await check_data(user_input, self.hass)
             except Exception:
                 _LOGGER.warning(
                     "Skipping online validation due to exception.",
@@ -76,48 +79,42 @@ class KacoFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
         """Return the options flow handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for the KACO integration."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Store initial config for later updates."""
-        self.config_entry = config_entry
-        self.data: Dict[str, Any] = dict(config_entry.data.items())
-        self._errors: Dict[str, str] = {}
-
     async def async_step_init(self, user_input: Dict[str, Any] | None = None):
         """Show and process the options form."""
-        self._errors = {}
+        errors: Dict[str, str] = {}
 
         if user_input is not None:
             try:
-                self._errors = await check_data(
-                    user_input, self.hass.async_add_executor_job
-                )
+                errors = await check_data(user_input, self.hass)
             except Exception:
                 _LOGGER.warning(
                     "Skipping online validation in options due to exception.",
                     exc_info=True,
                 )
-                self._errors = {}
+                errors = {}
 
-            if not self._errors:
-                updated = ensure_config(user_input)
-                self.data.update(updated)
+            if not errors:
+                data = dict(self.config_entry.data.items())
+                data.update(ensure_config(user_input))
                 return self.async_create_entry(
-                    title=self.data.get(CONF_NAME, "kaco"),
-                    data=self.data,
+                    title=data.get(CONF_NAME, "kaco"),
+                    data=data,
                 )
 
-        defaults = ensure_config(self.data)
+        defaults = ensure_config(dict(self.config_entry.data.items()))
         schema = vol.Schema(create_form(defaults))
         return self.async_show_form(
             step_id="init",
             data_schema=schema,
-            errors=self._errors,
+            errors=errors,
         )

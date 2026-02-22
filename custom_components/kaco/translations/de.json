@@ -1,0 +1,52 @@
+{
+    "config": {
+        "title": "KACO - Solar-Wechselrichter",
+        "step": {
+            "user": {
+                "title": "KACO",
+                "description": "Gib den Sensornamen ein und konfiguriere die Sensorparameter. Weitere Infos unter https://github.com/KoljaWindeler/kaco#configuration-options.",
+                "data": {
+                    "name": "Anzeigename (kann sp\u00e4ter ge\u00e4ndert werden)",
+                    "url": "IP-Adresse des Wechselrichters, z.\u00a0B. 192.168.2.194",
+                    "kwh_interval": "Sek. zwischen zwei kWh-Aktualisierungen, Standard: 120",
+                    "interval": "Sek. zwischen zwei Aktualisierungen, Standard: 20",
+                    "generator_voltage": "Entit\u00e4t aktivieren: Generatorspannung",
+                    "generator_current": "Entit\u00e4t aktivieren: Generatorstrom",
+                    "grid_voltage": "Entit\u00e4t aktivieren: Netzspannung",
+                    "grid_current": "Entit\u00e4t aktivieren: Netzstrom",
+                    "serial_number": "Seriennummer (optional, f\u00fcr Ger\u00e4teinfo)",
+                    "mac_address": "MAC-Adresse (optional, f\u00fcr Ger\u00e4tezuordnung)"
+                }
+            }
+        },
+        "error": {
+            "url_error": "Die URL ist ung\u00fcltig, Daten konnten nicht heruntergeladen werden."
+        },
+        "abort": {
+            "already_configured": "Diese Wechselrichter-IP ist bereits konfiguriert."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "KACO",
+                "description": "Gib den Sensornamen ein und konfiguriere die Sensorparameter. Weitere Infos unter https://github.com/KoljaWindeler/kaco#configuration-options.",
+                "data": {
+                    "name": "Anzeigename (kann sp\u00e4ter ge\u00e4ndert werden)",
+                    "url": "IP-Adresse des Wechselrichters, z.\u00a0B. 192.168.2.194",
+                    "interval": "Sek. zwischen zwei Aktualisierungen, Standard: 20",
+                    "kwh_interval": "Sek. zwischen zwei kWh-Aktualisierungen, Standard: 120",
+                    "generator_voltage": "Entit\u00e4t aktivieren: Generatorspannung",
+                    "generator_current": "Entit\u00e4t aktivieren: Generatorstrom",
+                    "grid_voltage": "Entit\u00e4t aktivieren: Netzspannung",
+                    "grid_current": "Entit\u00e4t aktivieren: Netzstrom",
+                    "serial_number": "Seriennummer (optional, f\u00fcr Ger\u00e4teinfo)",
+                    "mac_address": "MAC-Adresse (optional, f\u00fcr Ger\u00e4tezuordnung)"
+                }
+            }
+        },
+        "error": {
+            "url_error": "Die URL ist ung\u00fcltig, Daten konnten nicht heruntergeladen werden."
+        }
+    }
+}

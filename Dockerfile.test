@@ -1,0 +1,18 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install test dependencies
+COPY requirements_test.txt .
+RUN pip install --no-cache-dir -r requirements_test.txt
+
+# Copy project
+COPY . .
+
+# Run tests
+CMD ["pytest", "tests/", "-v", "--tb=short"]

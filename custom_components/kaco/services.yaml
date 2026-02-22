@@ -1,0 +1,5 @@
+repair_statistics:
+  name: Statistiken reparieren
+  description: >-
+    Bereinigt verwaiste Statistiken und importiert historische Energiedaten
+    vom Wechselrichter. Kann einige Minuten dauern.
