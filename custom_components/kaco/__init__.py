@@ -51,9 +51,9 @@ _MAX_INTERVAL = 120  # Sekunden (Max-Poll)
 _BACKOFF_BASE = 2.0  # exponentieller Faktor
 _JITTER_FRACTION = 0.15  # ±15% Zufallsjitter
 _WARN_UNTIL_FAILS = 3  # bis zu 3 Warnungen, danach DEBUG
-_RETRY_PER_POLL = 2  # lokale Wiederholungsversuche pro Poll
-_RT_TIMEOUT = 10  # Timeout realtime.csv (was 5s, TL3 is slow)
-_DAY_TIMEOUT = 15  # Timeout Tagesdatei (was 10s)
+_RETRY_PER_POLL = 1  # lokale Wiederholungsversuche pro Poll
+_RT_TIMEOUT = 30  # Timeout realtime.csv (TL3 can take 20s+)
+_DAY_TIMEOUT = 45  # Timeout Tagesdatei
 
 
 def _apply_backoff(current: float, fail_count: int) -> float:
@@ -296,7 +296,7 @@ async def get_coordinator(
                                             new_data = dict(config_entry.data)
                                             new_data[CONF_SERIAL_NUMBER] = cols[1]
                                             hass.config_entries.async_update_entry(
-                                                config_entry, data=new_data
+                                                config_entry, data=new_data, options=new_data
                                             )
                 except TimeoutError:
                     _LOGGER.debug("Timeout fetching daily CSV for %s", ip)
@@ -351,7 +351,7 @@ async def get_coordinator(
     )
     node["coordinator"] = coordinator
 
-    # Erster Refresh (nicht-blockierend)
-    await coordinator.async_refresh()
-    _LOGGER.debug("Coordinator initialized for %s", ip or "unknown")
+    # Defaults setzen und Update-Zyklus starten (kein blockierender Erst-Poll)
+    coordinator.async_set_updated_data(node["values"])
+    _LOGGER.debug("Coordinator initialized for %s (first poll via timer)", ip or "unknown")
     return coordinator
